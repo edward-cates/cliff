@@ -260,23 +260,9 @@ const app = createApp({
                     photo.metadata.faceEmbedding = Array.from(detections.descriptor);
                     photo.metadata.confidence = detections.detection.score;
                 } else {
-                    // Try with TinyFaceDetector as fallback
-                    const tinyDetections = await faceapi.detectSingleFace(img, new faceapi.TinyFaceDetectorOptions({
-                        scoreThreshold: 0.5,
-                        inputSize: 512
-                    }))
-                    .withFaceLandmarks()
-                    .withFaceDescriptor();
-
-                    if (tinyDetections) {
-                        photo.metadata.hasFace = true;
-                        photo.metadata.faceEmbedding = Array.from(tinyDetections.descriptor);
-                        photo.metadata.confidence = tinyDetections.detection.score;
-                    } else {
-                        photo.metadata.hasFace = false;
-                        photo.metadata.faceEmbedding = null;
-                        photo.metadata.confidence = 0;
-                    }
+                    photo.metadata.hasFace = false;
+                    photo.metadata.faceEmbedding = null;
+                    photo.metadata.confidence = 0;
                 }
 
                 URL.revokeObjectURL(img.src);
