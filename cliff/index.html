@@ -143,15 +143,10 @@
                                                     </template>
                                                 </v-progress-linear>
                                                 <div class="text-center mt-2">
-                                                    <template v-if="processingProgress < 50">
-                                                        Detecting faces... {{ processedCount }} of {{ totalPhotos }}
-                                                        <div v-if="estimatedTimeRemaining" class="text-caption">
-                                                            Estimated time remaining: {{ formatTime(estimatedTimeRemaining) }}
-                                                        </div>
-                                                    </template>
-                                                    <template v-else>
-                                                        Creating groups... {{ processedCount }} of {{ totalPhotos }}
-                                                    </template>
+                                                    Detecting faces... {{ processedCount }} of {{ totalPhotos }}
+                                                    <div v-if="estimatedTimeRemaining" class="text-caption">
+                                                        Estimated time remaining: {{ formatTime(estimatedTimeRemaining) }}
+                                                    </div>
                                                 </div>
                                             </v-card-text>
                                         </v-card>
@@ -196,36 +191,41 @@
                                             <template v-for="(photo, index) in sortedPhotos" :key="index">
                                                 <v-col cols="2">
                                                     <v-card @click="toggleFaceDetection(photo)" class="h-100">
-                                                        <v-img
-                                                            :src="photo.processedImageUrl"
-                                                            aspect-ratio="1"
-                                                            cover
-                                                        >
-                                                            <template v-slot:placeholder>
-                                                                <v-row class="fill-height ma-0" align="center" justify="center">
-                                                                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                                                                </v-row>
-                                                            </template>
-                                                        </v-img>
-                                                        <v-card-text class="pa-2">
-                                                            <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
-                                                            <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
-                                                            <v-chip
-                                                                :color="photo.metadata.hasFace ? 'success' : 'error'"
-                                                                size="small"
-                                                                class="mt-1"
+                                                        <template v-if="selectedFilter === 'failed'">
+                                                            <v-card-text class="pa-2">
+                                                                <div class="text-caption text-truncate">{{ photo.file.name }}</div>
+                                                                <div class="text-caption text-truncate text-error">{{ photo.error }}</div>
+                                                            </v-card-text>
+                                                        </template>
+                                                        <template v-else>
+                                                            <v-img
+                                                                :src="photo.processedImageUrl"
+                                                                aspect-ratio="1"
+                                                                cover
                                                             >
-                                                                {{ photo.metadata.hasFace ? 'Face Detected' : 'No Face' }} ({{ photo.metadata.confidence ? photo.metadata.confidence.toFixed(2) : '0.00' }})
-                                                            </v-chip>
-                                                        </v-card-text>
+                                                                <template v-slot:placeholder>
+                                                                    <v-row class="fill-height ma-0" align="center" justify="center">
+                                                                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                                                                    </v-row>
+                                                                </template>
+                                                            </v-img>
+                                                            <v-card-text class="pa-2">
+                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                                <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
+                                                                <v-chip
+                                                                    :color="photo.metadata.hasFace ? 'success' : 'error'"
+                                                                    size="small"
+                                                                    class="mt-1"
+                                                                >
+                                                                    {{ photo.metadata.hasFace ? 'Face Detected' : 'No Face' }} ({{ photo.metadata.confidence ? photo.metadata.confidence.toFixed(2) : '0.00' }})
+                                                                </v-chip>
+                                                            </v-card-text>
+                                                        </template>
                                                     </v-card>
                                                 </v-col>
                                             </template>
                                         </v-row>
                                     </v-card-text>
-                                    <v-card-actions>
-                                        <v-spacer></v-spacer>
-                                    </v-card-actions>
                                 </v-card>
                             </v-stepper-window-item>
 
@@ -233,69 +233,87 @@
                             <v-stepper-window-item :value="2">
                                 <v-card class="pa-4">
                                     <v-card-title>Face Detection Results</v-card-title>
+                                    <v-card-actions>
+                                        <v-spacer></v-spacer>
+                                    </v-card-actions>
                                     <v-card-text>
-                                        <v-row>
-                                            <v-col cols="12" sm="4">
-                                                <v-card variant="outlined">
-                                                    <v-card-text class="text-center">
-                                                        <div class="text-h4">{{ sortedPhotos.length }}</div>
-                                                        <div class="text-subtitle-1">Total Photos</div>
-                                                    </v-card-text>
-                                                </v-card>
-                                            </v-col>
-                                            <v-col cols="12" sm="4">
-                                                <v-card variant="outlined">
-                                                    <v-card-text class="text-center">
-                                                        <div class="text-h4">{{ photosWithFaces }}</div>
-                                                        <div class="text-subtitle-1">Photos with Faces</div>
-                                                    </v-card-text>
-                                                </v-card>
-                                            </v-col>
-                                            <v-col cols="12" sm="4">
-                                                <v-card variant="outlined">
-                                                    <v-card-text class="text-center">
-                                                        <div class="text-h4">{{ photosWithoutFaces }}</div>
-                                                        <div class="text-subtitle-1">Photos without Faces</div>
-                                                    </v-card-text>
-                                                </v-card>
-                                            </v-col>
-                                        </v-row>
+                                        <v-btn
+                                            v-if="!isProcessing && processedPhotos.length > 0"
+                                            color="primary"
+                                            size="x-large"
+                                            block
+                                            class="mb-4"
+                                            @click="groupByTime"
+                                        >
+                                            Group by time
+                                        </v-btn>
 
-                                        <v-row class="mt-4">
+                                        <div class="d-flex flex-wrap gap-2 mb-4">
+                                            <v-chip
+                                                :color="selectedFilter === 'all' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'all'"
+                                            >
+                                                All Successful ({{ processedPhotos.length }})
+                                            </v-chip>
+                                            <v-chip
+                                                :color="selectedFilter === 'face' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'face'"
+                                            >
+                                                Face ({{ photosWithFaces }})
+                                            </v-chip>
+                                            <v-chip
+                                                :color="selectedFilter === 'noFace' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'noFace'"
+                                            >
+                                                No Face ({{ photosWithoutFaces }})
+                                            </v-chip>
+                                            <v-chip
+                                                :color="selectedFilter === 'failed' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'failed'"
+                                            >
+                                                Failed ({{ failedPhotos.length }})
+                                            </v-chip>
+                                        </div>
+
+                                        <v-row>
                                             <template v-for="(photo, index) in sortedPhotos" :key="index">
-                                                <v-col cols="12" sm="6" md="4" lg="3">
-                                                    <v-card>
-                                                        <v-img
-                                                            :src="photo.processedImageUrl"
-                                                            aspect-ratio="1"
-                                                            cover
-                                                        >
-                                                            <template v-slot:placeholder>
-                                                                <v-row class="fill-height ma-0" align="center" justify="center">
-                                                                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
-                                                                </v-row>
-                                                            </template>
-                                                        </v-img>
-                                                        <v-card-text class="pa-2">
-                                                            <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
-                                                            <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
-                                                            <v-chip
-                                                                :color="photo.metadata.hasFace ? 'success' : 'error'"
-                                                                size="small"
-                                                                class="mt-1"
+                                                <v-col cols="2">
+                                                    <v-card @click="toggleFaceDetection(photo)" class="h-100">
+                                                        <template v-if="selectedFilter === 'failed'">
+                                                            <v-card-text class="pa-2">
+                                                                <div class="text-caption text-truncate">{{ photo.file.name }}</div>
+                                                                <div class="text-caption text-truncate text-error">{{ photo.error }}</div>
+                                                            </v-card-text>
+                                                        </template>
+                                                        <template v-else>
+                                                            <v-img
+                                                                :src="photo.processedImageUrl"
+                                                                aspect-ratio="1"
+                                                                cover
                                                             >
-                                                                {{ photo.metadata.hasFace ? 'Face Detected' : 'No Face' }}
-                                                            </v-chip>
-                                                        </v-card-text>
+                                                                <template v-slot:placeholder>
+                                                                    <v-row class="fill-height ma-0" align="center" justify="center">
+                                                                        <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                                                                    </v-row>
+                                                                </template>
+                                                            </v-img>
+                                                            <v-card-text class="pa-2">
+                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                                <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
+                                                                <v-chip
+                                                                    :color="photo.metadata.hasFace ? 'success' : 'error'"
+                                                                    size="small"
+                                                                    class="mt-1"
+                                                                >
+                                                                    {{ photo.metadata.hasFace ? 'Face Detected' : 'No Face' }} ({{ photo.metadata.confidence ? photo.metadata.confidence.toFixed(2) : '0.00' }})
+                                                                </v-chip>
+                                                            </v-card-text>
+                                                        </template>
                                                     </v-card>
                                                 </v-col>
                                             </template>
                                         </v-row>
                                     </v-card-text>
-                                    <v-card-actions>
-                                        <v-spacer></v-spacer>
-                                        <v-btn color="primary" @click="currentStep = 3">Continue to Grouping</v-btn>
-                                    </v-card-actions>
                                 </v-card>
                             </v-stepper-window-item>
 

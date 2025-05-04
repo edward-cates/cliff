@@ -107,6 +107,7 @@ const app = createApp({
             }
 
             isProcessing.value = false;
+            currentStep.value = 2;
         };
 
         const processPhoto = async (file) => {
