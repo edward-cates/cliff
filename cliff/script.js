@@ -4,7 +4,7 @@ const app = createApp({
     setup() {
         // Reactive state
         const currentStep = ref(1);
-        const steps = ref(['Select Photos', 'Face Detection', 'Group Formation', 'After Photo Matching', 'Review & Export']);
+        const steps = ref(['Select Photos', 'Face Detection', 'Group Formation']);
         const processedPhotos = ref([]);
         const failedPhotos = ref([]);
         const groups = ref([]);
@@ -16,11 +16,15 @@ const app = createApp({
         const selectedFilter = ref('all');
         const startTime = ref(null);
         const estimatedTimeRemaining = ref(null);
+        const selectedPhoto = ref(null);
+        const showGroupFilesModal = ref(false);
+        const selectedGroup = ref(null);
 
         // Computed properties
         const photosWithFaces = computed(() => processedPhotos.value.filter(p => p.metadata.hasFace).length);
         const photosWithoutFaces = computed(() => processedPhotos.value.filter(p => !p.metadata.hasFace).length);
         const matchedGroups = computed(() => Math.floor(groups.value.length * 0.8));
+        const groupsWithMatches = computed(() => groups.value.filter(g => g.matches.length > 0).length);
 
         const formatTime = (seconds) => {
             if (seconds < 60) return `${Math.round(seconds)} seconds`;
@@ -82,7 +86,7 @@ const app = createApp({
                     const photo = await processPhoto(file);
                     processedPhotos.value.push(photo);
                     processedCount.value++;
-                    processingProgress.value = (processedCount.value / totalPhotos.value) * 100;
+                    processingProgress.value = (processedCount.value / totalPhotos.value) * 50;
                     
                     // Update estimated time remaining
                     if (processedCount.value > 1) {
@@ -98,12 +102,12 @@ const app = createApp({
                         error: error.message
                     });
                     processedCount.value++;
-                    processingProgress.value = (processedCount.value / totalPhotos.value) * 100;
+                    processingProgress.value = (processedCount.value / totalPhotos.value) * 50;
                 }
             }
 
-            isProcessing.value = false;
-            estimatedTimeRemaining.value = null;
+            // Start grouping
+            await groupByTime();
         };
 
         const processPhoto = async (file) => {
@@ -314,6 +318,149 @@ const app = createApp({
             console.error('Failed to initialize face detection:', error);
         });
 
+        // Helper functions for grouping and matching
+        const cosineSimilarity = (a, b) => {
+            if (!a || !b) return 0;
+            const dotProduct = a.reduce((sum, val, i) => sum + val * b[i], 0);
+            const magnitudeA = Math.sqrt(a.reduce((sum, val) => sum + val * val, 0));
+            const magnitudeB = Math.sqrt(b.reduce((sum, val) => sum + val * val, 0));
+            return dotProduct / (magnitudeA * magnitudeB);
+        };
+
+        const groupByTime = async () => {
+            isProcessing.value = true;
+            processingProgress.value = 50;
+            totalPhotos.value = processedPhotos.value.length + failedPhotos.value.length;
+            processedCount.value = 0;
+
+            // Sort photos by timestamp
+            const sortedPhotos = [...processedPhotos.value].sort((a, b) => 
+                a.metadata.timestamp - b.metadata.timestamp
+            );
+
+            // Create time-based groups
+            const timeGroups = [];
+            let currentGroup = [];
+            const TEN_MINUTES = 10 * 60 * 1000; // 10 minutes in milliseconds
+
+            for (const photo of sortedPhotos) {
+                if (currentGroup.length === 0) {
+                    currentGroup.push(photo);
+                } else {
+                    const lastPhoto = currentGroup[currentGroup.length - 1];
+                    const timeDiff = photo.metadata.timestamp - lastPhoto.metadata.timestamp;
+                    
+                    if (timeDiff <= TEN_MINUTES) {
+                        currentGroup.push(photo);
+                    } else {
+                        if (currentGroup.length > 0) {
+                            timeGroups.push({
+                                photos: currentGroup,
+                                hasFace: currentGroup.some(p => p.metadata.hasFace)
+                            });
+                        }
+                        currentGroup = [photo];
+                    }
+                }
+                processedCount.value++;
+                processingProgress.value = 50 + (processedCount.value / totalPhotos.value) * 50;
+            }
+            if (currentGroup.length > 0) {
+                timeGroups.push({
+                    photos: currentGroup,
+                    hasFace: currentGroup.some(p => p.metadata.hasFace)
+                });
+            }
+
+            // Filter groups to keep only those with both face and non-face photos
+            const filteredGroups = timeGroups.filter(group => {
+                const hasFace = group.photos.some(p => p.metadata.hasFace);
+                const hasNoFace = group.photos.some(p => !p.metadata.hasFace);
+                return hasFace && hasNoFace;
+            });
+
+            // Find matching after photos for each group
+            const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+            const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
+            const SIMILARITY_THRESHOLD = 0.93;
+
+            // First, collect all photos that are part of any group
+            const unusedFacePhotos = sortedPhotos.filter(photo => 
+                photo.metadata.hasFace && 
+                !filteredGroups.some(group => group.photos.includes(photo))
+            );
+
+            // Clear existing groups
+            groups.value = [];
+
+            // Add groups with matches first
+            for (let i = 0; i < filteredGroups.length; i++) {
+                const group = filteredGroups[i];
+                const groupEndTime = Math.max(...group.photos.map(p => p.metadata.timestamp));
+                
+                // Find potential after photos that aren't in any group
+                const matches = unusedFacePhotos.filter(photo => {
+                    const timeDiff = photo.metadata.timestamp - groupEndTime;
+                    if (!(timeDiff >= ONE_WEEK && timeDiff <= ONE_YEAR && photo.metadata.hasFace)) {
+                        return false;
+                    }
+                    const groupFacePhotos = group.photos.filter(p => p.metadata.hasFace);
+                    const maxSimilarity = Math.max(...groupFacePhotos.map(facePhoto =>
+                        cosineSimilarity(facePhoto.metadata.faceEmbedding, photo.metadata.faceEmbedding)
+                    ));
+                    return maxSimilarity >= SIMILARITY_THRESHOLD;
+                }).map(photo => {
+                    const groupFacePhotos = group.photos.filter(p => p.metadata.hasFace);
+                    const maxSimilarity = Math.max(...groupFacePhotos.map(facePhoto =>
+                        cosineSimilarity(facePhoto.metadata.faceEmbedding, photo.metadata.faceEmbedding)
+                    ));
+                    return {
+                        photo: photo,
+                        similarity: maxSimilarity
+                    };
+                });
+
+                // Sort matches by similarity
+                matches.sort((a, b) => b.similarity - a.similarity);
+
+                // Add group to final groups array
+                groups.value.push({
+                    id: groups.value.length + 1,
+                    photos: group.photos,
+                    matches: matches,
+                    hasFace: group.hasFace
+                });
+            }
+
+            // Add groups without matches
+            for (let i = 0; i < filteredGroups.length; i++) {
+                const group = filteredGroups[i];
+                const groupEndTime = Math.max(...group.photos.map(p => p.metadata.timestamp));
+                
+                // Check if this group already exists (has matches)
+                const existingGroup = groups.value.find(g => 
+                    g.photos.some(p => group.photos.includes(p))
+                );
+
+                if (!existingGroup) {
+                    groups.value.push({
+                        id: groups.value.length + 1,
+                        photos: group.photos,
+                        matches: [],
+                        hasFace: group.hasFace
+                    });
+                }
+            }
+
+            isProcessing.value = false;
+            currentStep.value = 3;
+        };
+
+        const showGroupFiles = (group) => {
+            selectedGroup.value = group;
+            showGroupFilesModal.value = true;
+        };
+
         return {
             currentStep,
             steps,
@@ -329,6 +476,7 @@ const app = createApp({
             photosWithFaces,
             photosWithoutFaces,
             matchedGroups,
+            groupsWithMatches,
             selectedFilter,
             estimatedTimeRemaining,
             formatTime,
@@ -337,7 +485,12 @@ const app = createApp({
             startAnalysis,
             exportGroupInfo,
             exportSelectedPhotos,
-            toggleFaceDetection
+            toggleFaceDetection,
+            groupByTime,
+            selectedPhoto,
+            showGroupFiles,
+            showGroupFilesModal,
+            selectedGroup
         };
     }
 });
