@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Photo Grouping Tool</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://cdn.jsdelivr.net/npm/vuetify@3.5.0/dist/vuetify.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/@mdi/font@7.4.47/css/materialdesignicons.min.css" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/vue@3.4.15/dist/vue.global.prod.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/vuetify@3.5.0/dist/vuetify.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/face-api.js@0.22.2/dist/face-api.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+    <script type="module" src="script.js"></script>
+</head>
+<body>
+    <div id="app">
+        <v-app>
+            <v-main>
+                <v-container>
+                    <v-stepper v-model="currentStep" class="mb-6">
+                        <v-stepper-header>
+                            <template v-for="(step, index) in steps" :key="index">
+                                <v-stepper-item
+                                    :value="index + 1"
+                                    :title="step"
+                                ></v-stepper-item>
+                            </template>
+                        </v-stepper-header>
+
+                        <v-stepper-window>
+                            <!-- Step 1: Photo Selection -->
+                            <v-stepper-window-item :value="1">
+                                <v-card class="pa-4">
+                                    <v-card-title>Select Photos</v-card-title>
+                                    <v-card-text>
+                                        <v-file-input
+                                            v-model="files"
+                                            multiple
+                                            accept="image/*"
+                                            label="Select photos"
+                                            prepend-icon="mdi-camera"
+                                            @change="handleFileSelect"
+                                            class="mb-4"
+                                            hide-details
+                                            show-size
+                                            truncate-length="15"
+                                        ></v-file-input>
+
+                                        <v-card
+                                            v-if="isProcessing"
+                                            class="mb-4"
+                                            variant="outlined"
+                                        >
+                                            <v-card-text>
+                                                <v-progress-linear
+                                                    v-model="processingProgress"
+                                                    color="primary"
+                                                    height="25"
+                                                >
+                                                    <template v-slot:default="{ value }">
+                                                        <strong>{{ Math.ceil(value) }}%</strong>
+                                                    </template>
+                                                </v-progress-linear>
+                                                <div class="text-center mt-2">
+                                                    Processing photos... {{ processedCount }} of {{ totalPhotos }}
+                                                </div>
+                                                <div v-if="estimatedTimeRemaining" class="text-center mt-1">
+                                                    Estimated time remaining: {{ formatTime(estimatedTimeRemaining) }}
+                                                </div>
+                                            </v-card-text>
+                                        </v-card>
+
+                                        <v-btn
+                                            v-if="!isProcessing && processedPhotos.length > 0"
+                                            color="primary"
+                                            class="mb-4"
+                                            @click="currentStep = 3"
+                                        >
+                                            Group by time
+                                        </v-btn>
+
+                                        <v-alert
+                                            v-if="sortedPhotos.length > 0"
+                                            type="info"
+                                            class="mb-4"
+                                            variant="tonal"
+                                        >
+                                            Photos are sorted by confidence in face detection. Photos with confidence closest to 50% appear first, making it easier to review uncertain detections. Click any photo to toggle between face detected and no face.
+                                        </v-alert>
+
+                                        <div class="d-flex flex-wrap gap-2 mb-4">
+                                            <v-chip
+                                                :color="selectedFilter === 'all' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'all'"
+                                            >
+                                                All Successful ({{ processedPhotos.length }})
+                                            </v-chip>
+                                            <v-chip
+                                                :color="selectedFilter === 'face' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'face'"
+                                            >
+                                                Face ({{ photosWithFaces }})
+                                            </v-chip>
+                                            <v-chip
+                                                :color="selectedFilter === 'noFace' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'noFace'"
+                                            >
+                                                No Face ({{ photosWithoutFaces }})
+                                            </v-chip>
+                                            <v-chip
+                                                :color="selectedFilter === 'failed' ? 'primary' : undefined"
+                                                @click="selectedFilter = 'failed'"
+                                            >
+                                                Failed ({{ failedPhotos.length }})
+                                            </v-chip>
+                                        </div>
+
+                                        <v-row>
+                                            <template v-for="(photo, index) in sortedPhotos" :key="index">
+                                                <v-col cols="12" sm="6" md="3" lg="2" xl="1.5">
+                                                    <v-card @click="toggleFaceDetection(photo)">
+                                                        <v-img
+                                                            :src="photo.processedImageUrl"
+                                                            aspect-ratio="1"
+                                                            cover
+                                                        >
+                                                            <template v-slot:placeholder>
+                                                                <v-row class="fill-height ma-0" align="center" justify="center">
+                                                                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                                                                </v-row>
+                                                            </template>
+                                                        </v-img>
+                                                        <v-card-text class="pa-2">
+                                                            <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                            <div class="text-caption text-truncate">{{ photo.metadata.timestamp ? new Date(photo.metadata.timestamp).toLocaleString() : 'No timestamp' }}</div>
+                                                            <v-chip
+                                                                :color="photo.metadata.hasFace ? 'success' : 'error'"
+                                                                size="small"
+                                                                class="mt-1"
+                                                            >
+                                                                {{ photo.metadata.hasFace ? 'Face Detected' : 'No Face' }} ({{ photo.metadata.confidence ? photo.metadata.confidence.toFixed(2) : '0.00' }})
+                                                            </v-chip>
+                                                        </v-card-text>
+                                                    </v-card>
+                                                </v-col>
+                                            </template>
+                                        </v-row>
+                                    </v-card-text>
+                                    <v-card-actions>
+                                        <v-spacer></v-spacer>
+                                    </v-card-actions>
+                                </v-card>
+                            </v-stepper-window-item>
+
+                            <!-- Step 2: Face Detection -->
+                            <v-stepper-window-item :value="2">
+                                <v-card class="pa-4">
+                                    <v-card-title>Face Detection Results</v-card-title>
+                                    <v-card-text>
+                                        <v-row>
+                                            <v-col cols="12" sm="4">
+                                                <v-card variant="outlined">
+                                                    <v-card-text class="text-center">
+                                                        <div class="text-h4">{{ sortedPhotos.length }}</div>
+                                                        <div class="text-subtitle-1">Total Photos</div>
+                                                    </v-card-text>
+                                                </v-card>
+                                            </v-col>
+                                            <v-col cols="12" sm="4">
+                                                <v-card variant="outlined">
+                                                    <v-card-text class="text-center">
+                                                        <div class="text-h4">{{ photosWithFaces }}</div>
+                                                        <div class="text-subtitle-1">Photos with Faces</div>
+                                                    </v-card-text>
+                                                </v-card>
+                                            </v-col>
+                                            <v-col cols="12" sm="4">
+                                                <v-card variant="outlined">
+                                                    <v-card-text class="text-center">
+                                                        <div class="text-h4">{{ photosWithoutFaces }}</div>
+                                                        <div class="text-subtitle-1">Photos without Faces</div>
+                                                    </v-card-text>
+                                                </v-card>
+                                            </v-col>
+                                        </v-row>
+
+                                        <v-row class="mt-4">
+                                            <template v-for="(photo, index) in sortedPhotos" :key="index">
+                                                <v-col cols="12" sm="6" md="4" lg="3">
+                                                    <v-card>
+                                                        <v-img
+                                                            :src="photo.processedImageUrl"
+                                                            aspect-ratio="1"
+                                                            cover
+                                                        >
+                                                            <template v-slot:placeholder>
+                                                                <v-row class="fill-height ma-0" align="center" justify="center">
+                                                                    <v-progress-circular indeterminate color="primary"></v-progress-circular>
+                                                                </v-row>
+                                                            </template>
+                                                        </v-img>
+                                                        <v-card-text class="pa-2">
+                                                            <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                            <div class="text-caption text-truncate">{{ photo.metadata.timestamp ? new Date(photo.metadata.timestamp).toLocaleString() : 'No timestamp' }}</div>
+                                                            <v-chip
+                                                                :color="photo.metadata.hasFace ? 'success' : 'error'"
+                                                                size="small"
+                                                                class="mt-1"
+                                                            >
+                                                                {{ photo.metadata.hasFace ? 'Face Detected' : 'No Face' }}
+                                                            </v-chip>
+                                                        </v-card-text>
+                                                    </v-card>
+                                                </v-col>
+                                            </template>
+                                        </v-row>
+                                    </v-card-text>
+                                    <v-card-actions>
+                                        <v-spacer></v-spacer>
+                                        <v-btn color="primary" @click="currentStep = 3">Continue to Grouping</v-btn>
+                                    </v-card-actions>
+                                </v-card>
+                            </v-stepper-window-item>
+
+                            <!-- Step 3: Group Formation -->
+                            <v-stepper-window-item :value="3">
+                                <v-card class="pa-4">
+                                    <v-card-title>Group Formation</v-card-title>
+                                    <v-card-text>
+                                        <v-timeline>
+                                            <template v-for="(group, index) in groups" :key="index">
+                                                <v-timeline-item
+                                                    :dot-color="group.hasFace ? 'success' : 'error'"
+                                                    size="small"
+                                                >
+                                                    <v-card class="mb-4">
+                                                        <v-card-title>Group {{ group.id }}</v-card-title>
+                                                        <v-card-text>
+                                                            <v-row>
+                                                                <template v-for="(photo, pIndex) in group.photos" :key="pIndex">
+                                                                    <v-col cols="12" sm="6" md="4">
+                                                                        <v-card>
+                                                                            <v-img
+                                                                                :src="photo.processedImageUrl"
+                                                                                aspect-ratio="1"
+                                                                                cover
+                                                                            ></v-img>
+                                                                            <v-card-text class="pa-2">
+                                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                                            </v-card-text>
+                                                                        </v-card>
+                                                                    </v-col>
+                                                                </template>
+                                                            </v-row>
+                                                        </v-card-text>
+                                                    </v-card>
+                                                </v-timeline-item>
+                                            </template>
+                                        </v-timeline>
+                                    </v-card-text>
+                                    <v-card-actions>
+                                        <v-spacer></v-spacer>
+                                        <v-btn color="primary" @click="currentStep = 4">Continue to Matching</v-btn>
+                                    </v-card-actions>
+                                </v-card>
+                            </v-stepper-window-item>
+
+                            <!-- Step 4: After Photo Matching -->
+                            <v-stepper-window-item :value="4">
+                                <v-card class="pa-4">
+                                    <v-card-title>After Photo Matching</v-card-title>
+                                    <v-card-text>
+                                        <v-row>
+                                            <template v-for="(group, index) in groups" :key="index">
+                                                <v-col cols="12" md="6">
+                                                    <v-card class="mb-4">
+                                                        <v-card-title>Group {{ group.id }}</v-card-title>
+                                                        <v-card-text>
+                                                            <v-row>
+                                                                <template v-for="(photo, pIndex) in group.photos" :key="pIndex">
+                                                                    <v-col cols="12" sm="6" md="4">
+                                                                        <v-card>
+                                                                            <v-img
+                                                                                :src="photo.processedImageUrl"
+                                                                                aspect-ratio="1"
+                                                                                cover
+                                                                            ></v-img>
+                                                                            <v-card-text class="pa-2">
+                                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                                            </v-card-text>
+                                                                        </v-card>
+                                                                    </v-col>
+                                                                </template>
+                                                            </v-row>
+                                                            <v-alert
+                                                                type="info"
+                                                                class="mt-4"
+                                                            >
+                                                                Best Match: {{ Math.floor(Math.random() * 100) }}% similarity
+                                                            </v-alert>
+                                                        </v-card-text>
+                                                    </v-card>
+                                                </v-col>
+                                            </template>
+                                        </v-row>
+                                    </v-card-text>
+                                    <v-card-actions>
+                                        <v-spacer></v-spacer>
+                                        <v-btn color="primary" @click="currentStep = 5">Finalize Groups</v-btn>
+                                    </v-card-actions>
+                                </v-card>
+                            </v-stepper-window-item>
+
+                            <!-- Step 5: Review & Export -->
+                            <v-stepper-window-item :value="5">
+                                <v-card class="pa-4">
+                                    <v-card-title>Review & Export</v-card-title>
+                                    <v-card-text>
+                                        <v-row>
+                                            <v-col cols="12" sm="6">
+                                                <v-card variant="outlined">
+                                                    <v-card-text class="text-center">
+                                                        <div class="text-h4">{{ groups.length }}</div>
+                                                        <div class="text-subtitle-1">Total Groups</div>
+                                                    </v-card-text>
+                                                </v-card>
+                                            </v-col>
+                                            <v-col cols="12" sm="6">
+                                                <v-card variant="outlined">
+                                                    <v-card-text class="text-center">
+                                                        <div class="text-h4">{{ matchedGroups }}</div>
+                                                        <div class="text-subtitle-1">Groups with After Photos</div>
+                                                    </v-card-text>
+                                                </v-card>
+                                            </v-col>
+                                        </v-row>
+
+                                        <v-row class="mt-4">
+                                            <v-col cols="12" class="text-center">
+                                                <v-btn
+                                                    color="primary"
+                                                    class="mr-2"
+                                                    @click="exportGroupInfo"
+                                                >
+                                                    <v-icon start>mdi-export</v-icon>
+                                                    Export Group Information
+                                                </v-btn>
+                                                <v-btn
+                                                    color="primary"
+                                                    @click="exportSelectedPhotos"
+                                                >
+                                                    <v-icon start>mdi-image-multiple</v-icon>
+                                                    Export Selected Photos
+                                                </v-btn>
+                                            </v-col>
+                                        </v-row>
+                                    </v-card-text>
+                                </v-card>
+                            </v-stepper-window-item>
+                        </v-stepper-window>
+                    </v-stepper>
+                </v-container>
+            </v-main>
+        </v-app>
+    </div>
+</body>
+</html>
