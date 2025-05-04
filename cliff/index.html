@@ -145,6 +145,9 @@
                                                 <div class="text-center mt-2">
                                                     <template v-if="processingProgress < 50">
                                                         Detecting faces... {{ processedCount }} of {{ totalPhotos }}
+                                                        <div v-if="estimatedTimeRemaining" class="text-caption">
+                                                            Estimated time remaining: {{ formatTime(estimatedTimeRemaining) }}
+                                                        </div>
                                                     </template>
                                                     <template v-else>
                                                         Creating groups... {{ processedCount }} of {{ totalPhotos }}

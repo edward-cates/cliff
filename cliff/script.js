@@ -86,7 +86,7 @@ const app = createApp({
                     const photo = await processPhoto(file);
                     processedPhotos.value.push(photo);
                     processedCount.value++;
-                    processingProgress.value = (processedCount.value / totalPhotos.value) * 50;
+                    processingProgress.value = (processedCount.value / totalPhotos.value) * 100;
                     
                     // Update estimated time remaining
                     if (processedCount.value > 1) {
@@ -102,12 +102,11 @@ const app = createApp({
                         error: error.message
                     });
                     processedCount.value++;
-                    processingProgress.value = (processedCount.value / totalPhotos.value) * 50;
+                    processingProgress.value = (processedCount.value / totalPhotos.value) * 100;
                 }
             }
 
-            // Start grouping
-            await groupByTime();
+            isProcessing.value = false;
         };
 
         const processPhoto = async (file) => {
@@ -329,7 +328,7 @@ const app = createApp({
 
         const groupByTime = async () => {
             isProcessing.value = true;
-            processingProgress.value = 50;
+            processingProgress.value = 0;
             totalPhotos.value = processedPhotos.value.length + failedPhotos.value.length;
             processedCount.value = 0;
 
@@ -363,7 +362,7 @@ const app = createApp({
                     }
                 }
                 processedCount.value++;
-                processingProgress.value = 50 + (processedCount.value / totalPhotos.value) * 50;
+                processingProgress.value = (processedCount.value / totalPhotos.value) * 100;
             }
             if (currentGroup.length > 0) {
                 timeGroups.push({
@@ -392,8 +391,10 @@ const app = createApp({
 
             // Clear existing groups
             groups.value = [];
+            let groupId = 1;
+            let noMatchGroupId = 1;
 
-            // Add groups with matches first
+            // Process all groups in a single loop
             for (let i = 0; i < filteredGroups.length; i++) {
                 const group = filteredGroups[i];
                 const groupEndTime = Math.max(...group.photos.map(p => p.metadata.timestamp));
@@ -423,31 +424,22 @@ const app = createApp({
                 // Sort matches by similarity
                 matches.sort((a, b) => b.similarity - a.similarity);
 
-                // Add group to final groups array
-                groups.value.push({
-                    id: groups.value.length + 1,
-                    photos: group.photos,
-                    matches: matches,
-                    hasFace: group.hasFace
-                });
-            }
-
-            // Add groups without matches
-            for (let i = 0; i < filteredGroups.length; i++) {
-                const group = filteredGroups[i];
-                const groupEndTime = Math.max(...group.photos.map(p => p.metadata.timestamp));
-                
-                // Check if this group already exists (has matches)
-                const existingGroup = groups.value.find(g => 
-                    g.photos.some(p => group.photos.includes(p))
-                );
-
-                if (!existingGroup) {
+                // Add group to appropriate array based on matches
+                if (matches.length > 0) {
                     groups.value.push({
-                        id: groups.value.length + 1,
+                        id: groupId++,
                         photos: group.photos,
-                        matches: [],
-                        hasFace: group.hasFace
+                        matches: matches,
+                        hasFace: group.hasFace,
+                        hasMatches: true
+                    });
+                } else {
+                    groups.value.push({
+                        id: noMatchGroupId++,
+                        photos: group.photos,
+                        matches: matches,
+                        hasFace: group.hasFace,
+                        hasMatches: false
                     });
                 }
             }
