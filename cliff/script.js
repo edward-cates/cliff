@@ -10,6 +10,7 @@ const app = createApp({
         const groups = ref([]);
         const unmatchedGroups = ref([]);
         const isProcessing = ref(false);
+        const isGrouping = ref(false);
         const processingProgress = ref(0);
         const processedCount = ref(0);
         const totalPhotos = ref(0);
@@ -129,6 +130,7 @@ const app = createApp({
                     console.error('Error processing photo:', error);
                     failedPhotos.value.push({
                         file,
+                        name: file.name,
                         error: error.message
                     });
                     processedCount.value++;
@@ -387,6 +389,7 @@ const app = createApp({
         };
 
         const groupByTime = async () => {
+            isGrouping.value = true;
             isProcessing.value = true;
             processingProgress.value = 0;
             totalPhotos.value = processedPhotos.value.length + failedPhotos.value.length;
@@ -511,6 +514,7 @@ const app = createApp({
             unmatchedGroups.value = unmatchedGroupsList;
 
             isProcessing.value = false;
+            isGrouping.value = false;
             currentStep.value = 3;
         };
 
@@ -528,6 +532,7 @@ const app = createApp({
             groups,
             unmatchedGroups,
             isProcessing,
+            isGrouping,
             processingProgress,
             processedCount,
             totalPhotos,

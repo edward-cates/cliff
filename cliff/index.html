@@ -252,9 +252,10 @@
                                                 <v-col cols="2">
                                                     <v-card @click="toggleFaceDetection(photo)" class="h-100">
                                                         <template v-if="selectedFilter === 'failed'">
-                                                            <v-card-text class="pa-2">
-                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
-                                                                <div class="text-caption text-truncate text-error">{{ photo.error }}</div>
+                                                            <v-card-text class="pa-2 d-flex flex-column align-center justify-center" style="height: 100%">
+                                                                <v-icon color="error" size="x-large" class="mb-2">mdi-close-circle</v-icon>
+                                                                <div class="text-caption text-truncate text-center">{{ photo.name }}</div>
+                                                                <div class="text-caption text-truncate text-error text-center">{{ photo.error }}</div>
                                                             </v-card-text>
                                                         </template>
                                                         <template v-else>
@@ -299,11 +300,13 @@
                                     <v-card-text>
                                         <v-btn
                                             v-if="!isProcessing && processedPhotos.length > 0"
+                                            v-loading="isGrouping"
                                             color="primary"
                                             size="x-large"
                                             block
                                             class="mb-4"
                                             @click="groupByTime"
+                                            :disabled="isGrouping"
                                         >
                                             Group by time
                                         </v-btn>
@@ -340,9 +343,10 @@
                                                 <v-col cols="2">
                                                     <v-card @click="toggleFaceDetection(photo)" class="h-100">
                                                         <template v-if="selectedFilter === 'failed'">
-                                                            <v-card-text class="pa-2">
-                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
-                                                                <div class="text-caption text-truncate text-error">{{ photo.error }}</div>
+                                                            <v-card-text class="pa-2 d-flex flex-column align-center justify-center" style="height: 100%">
+                                                                <v-icon color="error" size="x-large" class="mb-2">mdi-close-circle</v-icon>
+                                                                <div class="text-caption text-truncate text-center">{{ photo.name }}</div>
+                                                                <div class="text-caption text-truncate text-error text-center">{{ photo.error }}</div>
                                                             </v-card-text>
                                                         </template>
                                                         <template v-else>
