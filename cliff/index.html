@@ -52,38 +52,105 @@
 
             <v-dialog v-model="showGroupFilesModal" max-width="800">
                 <v-card v-if="selectedGroup">
-                    <v-card-title>
-                        Group {{ selectedGroup.id }} Files
+                    <v-card-title class="d-flex align-center">
+                        <v-icon color="primary" class="mr-2">mdi-link-variant</v-icon>
+                        Chain {{ selectedGroup.chainId }} Details
                         <v-spacer></v-spacer>
                         <v-btn icon @click="showGroupFilesModal = false">
                             <v-icon>mdi-close</v-icon>
                         </v-btn>
                     </v-card-title>
+                    <v-divider></v-divider>
                     <v-card-text>
-                        <v-list>
-                            <v-list-subheader>Original Photos</v-list-subheader>
-                            <v-list-item
-                                v-for="photo in selectedGroup.photos"
-                                :key="photo.metadata.originalPath"
-                            >
-                                <v-list-item-title>{{ photo.metadata.originalPath }}</v-list-item-title>
-                                <v-list-item-subtitle>
-                                    {{ new Date(photo.metadata.timestamp).toLocaleString() }}
-                                </v-list-item-subtitle>
-                            </v-list-item>
-                            <v-list-subheader>Matched Photos</v-list-subheader>
-                            <v-list-item
-                                v-for="match in selectedGroup.matches"
-                                :key="match.photo.metadata.originalPath"
-                            >
-                                <v-list-item-title>{{ match.photo.metadata.originalPath }}</v-list-item-title>
-                                <v-list-item-subtitle>
-                                    {{ new Date(match.photo.metadata.timestamp).toLocaleString() }}
-                                    ({{ Math.round(match.similarity * 100) }}% match)
-                                </v-list-item-subtitle>
-                            </v-list-item>
-                        </v-list>
+                        <v-row>
+                            <v-col cols="12">
+                                <v-card variant="outlined" class="mb-4">
+                                    <v-card-title class="text-subtitle-1">
+                                        <v-icon color="primary" size="small" class="mr-2">mdi-image-multiple</v-icon>
+                                        Groups in Chain
+                                    </v-card-title>
+                                    <v-divider></v-divider>
+                                    <v-list density="compact">
+                                        <template v-for="group in groups.filter(g => g.chainId === selectedGroup.chainId)" :key="group.id">
+                                            <v-list-item>
+                                                <template v-slot:prepend>
+                                                    <v-avatar size="40" rounded="0">
+                                                        <v-img :src="group.photos[0].processedImageUrl"></v-img>
+                                                    </v-avatar>
+                                                </template>
+                                                <v-list-item-title class="text-body-2">Group {{ group.id }}</v-list-item-title>
+                                                <v-list-item-subtitle class="text-caption">
+                                                    {{ group.photos.length }} photos
+                                                </v-list-item-subtitle>
+                                                <template v-slot:append>
+                                                    <v-chip
+                                                        :color="group.hasFace ? 'success' : 'error'"
+                                                        size="small"
+                                                        variant="tonal"
+                                                    >
+                                                        {{ group.hasFace ? 'Has Face' : 'No Face' }}
+                                                    </v-chip>
+                                                </template>
+                                            </v-list-item>
+                                            <v-divider v-if="group.nextGroup"></v-divider>
+                                            <v-list-item v-if="group.nextGroup" class="justify-center">
+                                                <v-icon color="primary" size="small" class="mr-2">mdi-link-variant</v-icon>
+                                                <v-chip color="info" size="small" variant="tonal">
+                                                    {{ Math.round(group.similarity * 100) }}% match
+                                                </v-chip>
+                                            </v-list-item>
+                                            <v-divider v-if="group.nextGroup"></v-divider>
+                                        </template>
+                                    </v-list>
+                                </v-card>
+                            </v-col>
+                            <v-col cols="12">
+                                <v-card variant="outlined" class="mb-4">
+                                    <v-card-title class="text-subtitle-1">
+                                        <v-icon color="primary" size="small" class="mr-2">mdi-camera</v-icon>
+                                        Photos in Group {{ selectedGroup.id }}
+                                    </v-card-title>
+                                    <v-divider></v-divider>
+                                    <v-list density="compact">
+                                        <v-list-item
+                                            v-for="photo in selectedGroup.photos"
+                                            :key="photo.metadata.originalPath"
+                                            class="mb-1"
+                                        >
+                                            <template v-slot:prepend>
+                                                <v-avatar size="40" rounded="0">
+                                                    <v-img :src="photo.processedImageUrl"></v-img>
+                                                </v-avatar>
+                                            </template>
+                                            <v-list-item-title class="text-body-2">{{ photo.metadata.originalPath }}</v-list-item-title>
+                                            <v-list-item-subtitle class="text-caption">
+                                                {{ new Date(photo.metadata.timestamp).toLocaleString() }}
+                                            </v-list-item-subtitle>
+                                            <template v-slot:append>
+                                                <v-chip
+                                                    :color="photo.metadata.hasFace ? 'success' : 'error'"
+                                                    size="small"
+                                                    variant="tonal"
+                                                >
+                                                    {{ photo.metadata.hasFace ? 'Face' : 'No Face' }}
+                                                </v-chip>
+                                            </template>
+                                        </v-list-item>
+                                    </v-list>
+                                </v-card>
+                            </v-col>
+                        </v-row>
                     </v-card-text>
+                    <v-card-actions class="pa-4">
+                        <v-spacer></v-spacer>
+                        <v-btn
+                            color="primary"
+                            variant="tonal"
+                            @click="showGroupFilesModal = false"
+                        >
+                            Close
+                        </v-btn>
+                    </v-card-actions>
                 </v-card>
             </v-dialog>
 
@@ -145,7 +212,7 @@
                                                 <div class="text-center mt-2">
                                                     Detecting faces... {{ processedCount }} of {{ totalPhotos }}
                                                     <div v-if="estimatedTimeRemaining" class="text-caption">
-                                                        Estimated time remaining: {{ formatTime(estimatedTimeRemaining) }}
+                                                        Elapsed: {{ formatTime(elapsedTime) }} | Remaining: {{ formatTime(estimatedTimeRemaining) }}
                                                     </div>
                                                 </div>
                                             </v-card-text>
@@ -193,7 +260,7 @@
                                                     <v-card @click="toggleFaceDetection(photo)" class="h-100">
                                                         <template v-if="selectedFilter === 'failed'">
                                                             <v-card-text class="pa-2">
-                                                                <div class="text-caption text-truncate">{{ photo.file.name }}</div>
+                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
                                                                 <div class="text-caption text-truncate text-error">{{ photo.error }}</div>
                                                             </v-card-text>
                                                         </template>
@@ -281,7 +348,7 @@
                                                     <v-card @click="toggleFaceDetection(photo)" class="h-100">
                                                         <template v-if="selectedFilter === 'failed'">
                                                             <v-card-text class="pa-2">
-                                                                <div class="text-caption text-truncate">{{ photo.file.name }}</div>
+                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
                                                                 <div class="text-caption text-truncate text-error">{{ photo.error }}</div>
                                                             </v-card-text>
                                                         </template>
@@ -326,7 +393,7 @@
                                             <v-col cols="12" sm="6">
                                                 <v-card variant="outlined">
                                                     <v-card-text class="text-center">
-                                                        <div class="text-h4">{{ groupsWithMatches }}</div>
+                                                        <div class="text-h4">{{ groups.length }}</div>
                                                         <div class="text-subtitle-1">Total Groups</div>
                                                     </v-card-text>
                                                 </v-card>
@@ -334,132 +401,115 @@
                                             <v-col cols="12" sm="6">
                                                 <v-card variant="outlined">
                                                     <v-card-text class="text-center">
-                                                        <div class="text-h4">{{ groups.reduce((sum, g) => sum + g.matches.length, 0) }}</div>
-                                                        <div class="text-subtitle-1">Total Matches</div>
+                                                        <div class="text-h4">{{ groups.filter(g => g.nextGroup).length }}</div>
+                                                        <div class="text-subtitle-1">Total Connections</div>
                                                     </v-card-text>
                                                 </v-card>
                                             </v-col>
                                         </v-row>
 
                                         <v-list>
-                                            <v-list-item
-                                                v-for="group in groups.filter(g => g.matches.length > 0)"
-                                                :key="group.id"
-                                                class="mb-4"
-                                            >
-                                                <v-card class="w-100">
-                                                    <v-card-title>
-                                                        Group {{ group.id }}
-                                                        <v-btn
-                                                            color="primary"
-                                                            variant="text"
-                                                            class="ml-2"
-                                                            @click="showGroupFiles(group)"
-                                                        >
-                                                            <v-icon start>mdi-file-document-outline</v-icon>
-                                                            Show Files
-                                                        </v-btn>
-                                                    </v-card-title>
-                                                    <v-card-text>
-                                                        <div class="d-flex overflow-x-auto">
-                                                            <v-card
-                                                                v-for="photo in group.photos"
-                                                                :key="photo.metadata.originalPath"
-                                                                class="mr-2"
-                                                                width="150"
-                                                                @click="selectedPhoto = photo"
-                                                                style="cursor: pointer"
-                                                            >
-                                                                <v-img
-                                                                    :src="photo.processedImageUrl"
-                                                                    aspect-ratio="1"
-                                                                    cover
-                                                                ></v-img>
-                                                                <v-card-text class="pa-2">
-                                                                    <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
-                                                                    <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
-                                                                    <v-chip
-                                                                        :color="photo.metadata.hasFace ? 'success' : 'error'"
-                                                                        size="small"
-                                                                        class="mt-1"
-                                                                    >
-                                                                        {{ photo.metadata.hasFace ? 'Face' : 'No Face' }}
-                                                                    </v-chip>
-                                                                </v-card-text>
-                                                            </v-card>
-                                                            <v-card
-                                                                v-for="match in group.matches"
-                                                                :key="match.photo.metadata.originalPath"
-                                                                class="mr-2"
-                                                                width="150"
-                                                                @click="selectedPhoto = match.photo"
-                                                                style="cursor: pointer"
-                                                            >
-                                                                <v-img
-                                                                    :src="match.photo.processedImageUrl"
-                                                                    aspect-ratio="1"
-                                                                    cover
-                                                                ></v-img>
-                                                                <v-card-text class="pa-2">
-                                                                    <div class="text-caption text-truncate">{{ match.photo.metadata.originalPath }}</div>
-                                                                    <div class="text-caption text-truncate">{{ new Date(match.photo.metadata.timestamp).toLocaleString() }}</div>
-                                                                    <v-chip
-                                                                        color="info"
-                                                                        size="small"
-                                                                        class="mt-1"
-                                                                    >
-                                                                        {{ Math.round(match.similarity * 100) }}% match
-                                                                    </v-chip>
-                                                                </v-card-text>
-                                                            </v-card>
-                                                        </div>
-                                                    </v-card-text>
-                                                </v-card>
-                                            </v-list-item>
+                                            <template v-for="chain in groups.reduce((chains, group) => {
+                                                if (group.isFirstInChain) {
+                                                    const chain = [group];
+                                                    let current = group;
+                                                    while (current.nextGroup) {
+                                                        const next = groups.find(g => g.id === current.nextGroup.id);
+                                                        if (next) {
+                                                            chain.push(next);
+                                                            current = next;
+                                                        } else {
+                                                            break;
+                                                        }
+                                                    }
+                                                    chains.push(chain);
+                                                }
+                                                return chains;
+                                            }, [])" :key="chain[0].id">
+                                                <v-list-item class="mb-4">
+                                                    <v-card class="w-100">
+                                                        <v-card-title>
+                                                            <div class="d-flex align-center">
+                                                                <span>Chain {{ chain[0].chainId }}</span>
+                                                                <v-spacer></v-spacer>
+                                                                <v-btn
+                                                                    color="primary"
+                                                                    variant="text"
+                                                                    class="ml-2"
+                                                                    @click="showGroupFiles(chain[0])"
+                                                                >
+                                                                    <v-icon start>mdi-file-document-outline</v-icon>
+                                                                    Show Files
+                                                                </v-btn>
+                                                            </div>
+                                                        </v-card-title>
+                                                        <v-card-text>
+                                                            <div class="d-flex align-center overflow-x-auto">
+                                                                <template v-for="(group, index) in chain" :key="group.id">
+                                                                    <div class="d-flex align-center">
+                                                                        <div class="d-flex flex-column align-center">
+                                                                            <div class="text-caption mb-1">Group {{ group.id }}</div>
+                                                                            <div class="d-flex overflow-x-auto">
+                                                                                <v-card
+                                                                                    v-for="photo in group.photos"
+                                                                                    :key="photo.metadata.originalPath"
+                                                                                    class="mr-2"
+                                                                                    width="150"
+                                                                                    @click="selectedPhoto = photo"
+                                                                                    style="cursor: pointer"
+                                                                                >
+                                                                                    <v-img
+                                                                                        :src="photo.processedImageUrl"
+                                                                                        aspect-ratio="1"
+                                                                                        cover
+                                                                                    ></v-img>
+                                                                                    <v-card-text class="pa-2">
+                                                                                        <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                                                        <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
+                                                                                        <v-chip
+                                                                                            :color="photo.metadata.hasFace ? 'success' : 'error'"
+                                                                                            size="small"
+                                                                                            class="mt-1"
+                                                                                        >
+                                                                                            {{ photo.metadata.hasFace ? 'Face' : 'No Face' }}
+                                                                                        </v-chip>
+                                                                                    </v-card-text>
+                                                                                </v-card>
+                                                                            </div>
+                                                                        </div>
+                                                                        <div v-if="index < chain.length - 1" class="d-flex align-center mx-2">
+                                                                            <v-icon color="primary" size="large">mdi-link-variant</v-icon>
+                                                                            <v-chip color="info" variant="tonal" class="mx-2">
+                                                                                {{ Math.round(group.similarity * 100) }}% match
+                                                                            </v-chip>
+                                                                        </div>
+                                                                    </div>
+                                                                </template>
+                                                            </div>
+                                                        </v-card-text>
+                                                    </v-card>
+                                                </v-list-item>
+                                                <v-divider class="my-4"></v-divider>
+                                            </template>
                                         </v-list>
 
-                                        <v-expansion-panels v-if="groups.some(g => g.matches.length === 0)" class="mt-4">
+                                        <!-- Unmatched Groups Section -->
+                                        <v-expansion-panels v-if="unmatchedGroups.length > 0" class="mt-4">
                                             <v-expansion-panel>
                                                 <v-expansion-panel-title>
-                                                    <template v-slot:default="{ expanded }">
-                                                        <v-row no-gutters>
-                                                            <v-col cols="4" class="d-flex justify-start">
-                                                                Groups Without Matches
-                                                            </v-col>
-                                                            <v-col cols="8" class="text--secondary">
-                                                                <v-fade-transition leave-absolute>
-                                                                    <span v-if="expanded" key="0">
-                                                                        Click to collapse
-                                                                    </span>
-                                                                    <span v-else key="1">
-                                                                        {{ groups.filter(g => g.matches.length === 0).length }} groups
-                                                                    </span>
-                                                                </v-fade-transition>
-                                                            </v-col>
-                                                        </v-row>
-                                                    </template>
+                                                    <v-icon start>mdi-image-multiple</v-icon>
+                                                    Unmatched Groups ({{ unmatchedGroups.length }})
                                                 </v-expansion-panel-title>
                                                 <v-expansion-panel-text>
                                                     <v-list>
-                                                        <v-list-item
-                                                            v-for="group in groups.filter(g => g.matches.length === 0)"
-                                                            :key="group.id"
-                                                            class="mb-4"
-                                                        >
-                                                            <v-card class="w-100">
-                                                                <v-card-title>
-                                                                    Group {{ group.id }}
-                                                                    <v-btn
-                                                                        color="primary"
-                                                                        variant="text"
-                                                                        class="ml-2"
-                                                                        @click="showGroupFiles(group)"
-                                                                    >
-                                                                        <v-icon start>mdi-file-document-outline</v-icon>
-                                                                        Show Files
-                                                                    </v-btn>
-                                                                </v-card-title>
+                                                        <v-list-item v-for="group in unmatchedGroups" :key="group.id" class="mb-4">
+                                                            <v-card variant="outlined" class="w-100">
                                                                 <v-card-text>
+                                                                    <div class="d-flex align-center mb-2">
+                                                                        <span class="text-caption text-grey">
+                                                                            {{ group.photos.length }} photos
+                                                                        </span>
+                                                                    </div>
                                                                     <div class="d-flex overflow-x-auto">
                                                                         <v-card
                                                                             v-for="photo in group.photos"
@@ -495,13 +545,14 @@
                                             </v-expansion-panel>
                                         </v-expansion-panels>
 
-                                        <v-expansion-panels v-if="groups.length > 0" class="mt-4">
+                                        <v-expansion-panels v-if="processedPhotos.length > 0" class="mt-4">
                                             <v-expansion-panel>
                                                 <v-expansion-panel-title>
                                                     <template v-slot:default="{ expanded }">
                                                         <v-row no-gutters>
                                                             <v-col cols="4" class="d-flex justify-start">
-                                                                Unmatched Photos
+                                                                <v-icon color="primary" size="small" class="mr-2">mdi-image</v-icon>
+                                                                Unused Photos
                                                             </v-col>
                                                             <v-col cols="8" class="text--secondary">
                                                                 <v-fade-transition leave-absolute>
@@ -509,7 +560,7 @@
                                                                         Click to collapse
                                                                     </span>
                                                                     <span v-else key="1">
-                                                                        {{ processedPhotos.length - groups.reduce((sum, g) => sum + g.photos.length + g.matches.length, 0) }} photos
+                                                                        {{ processedPhotos.length }} photos
                                                                     </span>
                                                                 </v-fade-transition>
                                                             </v-col>
@@ -517,34 +568,28 @@
                                                     </template>
                                                 </v-expansion-panel-title>
                                                 <v-expansion-panel-text>
-                                                    <div class="d-flex flex-wrap gap-2">
-                                                        <v-card
-                                                            v-for="photo in processedPhotos.filter(p => !groups.some(g => 
-                                                                g.photos.includes(p) || g.matches.some(m => m.photo === p)
-                                                            ))"
-                                                            :key="photo.metadata.originalPath"
-                                                            width="150"
-                                                            @click="selectedPhoto = photo"
-                                                            style="cursor: pointer"
-                                                        >
-                                                            <v-img
-                                                                :src="photo.processedImageUrl"
-                                                                aspect-ratio="1"
-                                                                cover
-                                                            ></v-img>
-                                                            <v-card-text class="pa-2">
-                                                                <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
-                                                                <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
-                                                                <v-chip
-                                                                    :color="photo.metadata.hasFace ? 'success' : 'error'"
-                                                                    size="small"
-                                                                    class="mt-1"
-                                                                >
-                                                                    {{ photo.metadata.hasFace ? 'Face' : 'No Face' }}
-                                                                </v-chip>
-                                                            </v-card-text>
-                                                        </v-card>
-                                                    </div>
+                                                    <v-row>
+                                                        <v-col cols="2" v-for="photo in processedPhotos" :key="photo.metadata.originalPath">
+                                                            <v-card @click="selectedPhoto = photo" class="h-100">
+                                                                <v-img
+                                                                    :src="photo.processedImageUrl"
+                                                                    aspect-ratio="1"
+                                                                    cover
+                                                                ></v-img>
+                                                                <v-card-text class="pa-2">
+                                                                    <div class="text-caption text-truncate">{{ photo.metadata.originalPath }}</div>
+                                                                    <div class="text-caption text-truncate">{{ new Date(photo.metadata.timestamp).toLocaleString() }}</div>
+                                                                    <v-chip
+                                                                        :color="photo.metadata.hasFace ? 'success' : 'error'"
+                                                                        size="small"
+                                                                        class="mt-1"
+                                                                    >
+                                                                        {{ photo.metadata.hasFace ? 'Face' : 'No Face' }}
+                                                                    </v-chip>
+                                                                </v-card-text>
+                                                            </v-card>
+                                                        </v-col>
+                                                    </v-row>
                                                 </v-expansion-panel-text>
                                             </v-expansion-panel>
                                         </v-expansion-panels>
