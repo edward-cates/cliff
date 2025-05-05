@@ -355,7 +355,7 @@ const app = createApp({
 
         const areGroupsConnected = (beforeGroup, afterGroup) => {
             // Find matching groups for each group
-            const ONE_WEEK = 7 * 24 * 60 * 60 * 1000;
+            const ONE_WEEK = 1 * 24 * 60 * 60 * 1000;
             const ONE_YEAR = 365 * 24 * 60 * 60 * 1000;
             const SIMILARITY_THRESHOLD = 0.97;
 
@@ -400,7 +400,7 @@ const app = createApp({
             // Create time-based groups
             const timeGroups = [];
             let currentGroup = [];
-            const TEN_MINUTES = 10 * 60 * 1000; // 10 minutes in milliseconds
+            const TEN_MINUTES = 2 * 60 * 1000; // 10 minutes in milliseconds
 
             for (const photo of sortedPhotos) {
                 if (currentGroup.length === 0) {
