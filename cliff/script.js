@@ -26,6 +26,31 @@ const app = createApp({
         const photosWithFaces = computed(() => processedPhotos.value.filter(p => p.metadata.hasFace).length);
         const photosWithoutFaces = computed(() => processedPhotos.value.filter(p => !p.metadata.hasFace).length);
         const matchedGroups = computed(() => Math.floor(groups.value.length * 0.8));
+        const unusedPhotos = computed(() => {
+            const usedPhotoPaths = new Set();
+            // Add photos from matched groups
+            groups.value.forEach(group => {
+                group.photos.forEach(photo => {
+                    usedPhotoPaths.add(photo.metadata.originalPath);
+                    console.log('Added to used:', photo.metadata.originalPath);
+                });
+            });
+            // Add photos from unmatched groups
+            unmatchedGroups.value.forEach(group => {
+                group.photos.forEach(photo => {
+                    usedPhotoPaths.add(photo.metadata.originalPath);
+                    console.log('Added to used:', photo.metadata.originalPath);
+                });
+            });
+            
+            const unused = processedPhotos.value.filter(photo => !usedPhotoPaths.has(photo.metadata.originalPath));
+            console.log('Total processed photos:', processedPhotos.value.length);
+            console.log('Used photos count:', usedPhotoPaths.size);
+            console.log('Unused photos count:', unused.length);
+            console.log('Unused photos:', unused.map(p => p.metadata.originalPath));
+            
+            return unused;
+        });
 
         const formatTime = (seconds) => {
             if (seconds < 60) return `${Math.round(seconds)} seconds`;
@@ -448,7 +473,6 @@ const app = createApp({
             // Split chains into multi-group and single-group chains
             const multiGroupChains = chains.filter(chain => chain.length > 1);
             const singleGroupChains = chains.filter(chain => chain.length === 1);
-            console.log("elength", multiGroupChains.length, singleGroupChains.length);
 
             // Convert multi-group chains to groups, maintaining the chain structure
             const multiGroups = multiGroupChains.map((chain, chainIndex) => {
@@ -513,6 +537,7 @@ const app = createApp({
             matchedGroups,
             selectedFilter,
             estimatedTimeRemaining,
+            elapsedTime,
             formatTime,
             handleFileSelect,
             handleDrop,
@@ -524,7 +549,8 @@ const app = createApp({
             selectedPhoto,
             showGroupFiles,
             showGroupFilesModal,
-            selectedGroup
+            selectedGroup,
+            unusedPhotos
         };
     }
 });
